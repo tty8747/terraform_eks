@@ -98,6 +98,10 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.igw.id
   }
 
+    lifecycle {
+    ignore_changes = all
+  }
+
   tags = {
     Name = "rt-public-${var.environment}"
     Environment = var.environment
@@ -111,6 +115,10 @@ resource "aws_route_table" "private" {
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_nat_gateway.ngw[count.index].id
+  }
+
+    lifecycle {
+    ignore_changes = all
   }
 
   tags = {

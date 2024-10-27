@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     cloudflare = {
-      source = "cloudflare/cloudflare"
+      source  = "cloudflare/cloudflare"
       version = "4.44.0"
     }
     aws = {
@@ -22,12 +22,24 @@ provider "cloudflare" {
 }
 
 module "vpc" {
-  source = "../modules/vpc"
-  region = var.region
-  azs = var.azs
-  environment = var.environment
-  cidr = var.cidr
-  priv_subnets = var.priv_subnets
-  pub_subnets = var.pub_subnets
+  source             = "../modules/vpc"
+  region             = var.region
+  azs                = var.azs
+  environment        = var.environment
+  cidr               = var.cidr
+  priv_subnets       = var.priv_subnets
+  pub_subnets        = var.pub_subnets
   enable_nat_gateway = var.enable_nat_gateway
+}
+
+module "eks" {
+  source            = "../modules/eks"
+  cluster_name      = "eks"
+  environment       = var.environment
+  cluster_version   = 1.31
+  subnet_ids        = module.vpc.priv_subnets[*].id
+  cluster_log_types = ["api"]
+  instance_types    = ["t2.micro"]
+  lb_subnet_ids     = module.vpc.pub_subnets[*].id
+  lb_vpc            = module.vpc.id
 }
