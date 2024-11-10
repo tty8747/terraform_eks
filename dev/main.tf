@@ -40,6 +40,13 @@ module "eks" {
   subnet_ids        = module.vpc.priv_subnets[*].id
   cluster_log_types = ["api"]
   instance_types    = ["t2.micro"]
-  lb_subnet_ids     = module.vpc.pub_subnets[*].id
-  lb_vpc            = module.vpc.id
+}
+
+module "lb" {
+  source         = "../modules/lb"
+  lb_subnet_ids  = module.vpc.pub_subnets[*].id
+  lb_vpc_id      = module.vpc.id
+  lb_cidr_blocks = module.vpc.pub_subnets[*].cidr_block
+  # исправить именование кластра
+  cluster_name = "eks-stage"
 }

@@ -30,6 +30,6 @@ variable "pub_subnets" {
 }
 
 variable "enable_nat_gateway" {
-  type = bool
+  type    = bool
   default = true
 }

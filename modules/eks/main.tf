@@ -69,25 +69,25 @@ resource "aws_eks_cluster" "eks" {
     Environment = var.environment
   }
 }
-  
+
 # Cluster addons
 # Enable pod networking within the cluster
 resource "aws_eks_addon" "vpc_cni" {
-  cluster_name                = aws_eks_cluster.eks.name
-  addon_name                  = "vpc-cni"
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "vpc-cni"
 }
 
 # Enable service discovery within the cluster
 resource "aws_eks_addon" "coredns" {
-  cluster_name                = aws_eks_cluster.eks.name
-  addon_name                  = "coredns"
-  depends_on = [aws_eks_node_group.internal]
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "coredns"
+  depends_on   = [aws_eks_node_group.internal]
 }
 
 # Enable service networking within the cluster
 resource "aws_eks_addon" "kube-proxy" {
-  cluster_name                = aws_eks_cluster.eks.name
-  addon_name                  = "kube-proxy"
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "kube-proxy"
 }
 
 ### Node groups
@@ -136,8 +136,8 @@ resource "aws_eks_node_group" "internal" {
   }
 
   scaling_config {
-    desired_size = 3
-    min_size     = 2
+    desired_size = 5
+    min_size     = 3
     max_size     = 10
   }
 
@@ -159,42 +159,7 @@ resource "aws_eks_node_group" "internal" {
   }
 }
 
-### ALB
-
-resource "aws_lb" "lb" {                                                                                                                                                               
-  name               = "alb-${local.cluster_name}"
-  internal           = false
-  load_balancer_type = "application"
-  subnets            = var.lb_subnet_ids
-
-  enable_cross_zone_load_balancing = true
- 
-  tags = {
-    Name                       = "alb-${local.cluster_name}"
-    "ingress.k8s.aws/resource" = "LoadBalancer"
-    "ingress.k8s.aws/stack"    = "ingress-${local.cluster_name}"
-    "elbv2.k8s.aws/cluster"    = local.cluster_name
-  }
- 
-  lifecycle {
-    ignore_changes = all
-  }
+data "aws_eks_cluster_auth" "eks" {
+  name = "eks"
 }
 
-resource "aws_lb_target_group" "lb_tg" {
-  name     = "lb-tg-${var.environment}"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = var.lb_vpc
-}
-
-resource "aws_lb_listener" "lb_listener" {
-  load_balancer_arn = aws_lb.lb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.lb_tg.arn
-  }
-}
