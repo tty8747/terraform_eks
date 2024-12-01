@@ -17,6 +17,10 @@ variable "subnet_ids" {
   type = list(string)
 }
 
+variable "subnet_ids_pub" {
+  type = list(string)
+}
+
 variable "cluster_log_types" {
   type    = list(string)
   default = ["api"]
@@ -25,4 +29,9 @@ variable "cluster_log_types" {
 variable "instance_types" {
   type    = list(string)
   default = ["t2.micro"]
+}
+
+variable "openid_list" {
+  type    = list(string)
+  default = ["sts.amazonaws.com"]
 }

@@ -57,7 +57,7 @@ infracost breakdown --path . --format html --out-file infracost-infra.html --sho
 3 порт 6443 управления кластером каким-то образом прикрыть или вывести в другую подсеть
 4 Установить алёрты на предполагаемые бюджеты
 5 В кластер добавить метрики, чтобы смотреть ресурсы
-
+6 Возможно переписать установку nginx и letsencrypt с используя провайдеры terraform, такие как kubectl и helm. Зависит от требований
 
 export TF_LOG_CORE=warn
 terraform plan
@@ -76,33 +76,49 @@ https://medium.com/@sanoj.sudo/how-to-create-aws-eks-cluster-step-by-step-a97420
 
 
 ```bash
-export KUBECONFIG=/tmp/myconf
-aws eks --region eu-central-1 update-kubeconfig --name eks-stage
-helm repo add eks-charts https://aws.github.io/eks-charts
-helm repo update
-# helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller --set clusterName=eks-stage-stage --set region=eu-central-1 --set vpcId=vpc-0fefa9c664d9be1c0
+# export KUBECONFIG=/tmp/myconf
+# aws eks --region eu-central-1 update-kubeconfig --name eks-stage
+# helm repo add eks-charts https://aws.github.io/eks-charts
+# helm repo update
+# # helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller --set clusterName=eks-stage-stage --set region=eu-central-1 --set vpcId=vpc-0fefa9c664d9be1c0
 
-kubectl --namespace kube-system create serviceaccount aws-load-balancer-controller
-kubectl -n kube-system annotate serviceaccounts aws-load-balancer-controller "eks.amazonaws.com/role-arn=arn:aws:iam::619115920608:role/AmazonEKSLoadBalancerControllerRole"
+# kubectl --namespace kube-system create serviceaccount aws-load-balancer-controller
+# kubectl -n kube-system annotate serviceaccounts aws-load-balancer-controller "eks.amazonaws.com/role-arn=arn:aws:iam::619115920608:role/AmazonEKSLoadBalancerControllerRole"
 
-helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=eks-stage \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller \
-  --set region=eu-central-1 \
-  --set vpcId=vpc-083b71b7e227218d4
+# helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller \
+#   -n kube-system \
+#   --set clusterName=eks-stage \
+#   --set serviceAccount.create=false \
+#   --set serviceAccount.name=aws-load-balancer-controller \
+#   --set region=eu-central-1 \
+#   --set vpcId=vpc-083b71b7e227218d4
+
 
 
 # Also: https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/examples/echo_server/#deploy-the-echoserver-resources
-kubectl create deployment game2048 --image=woodlee/docker-2048 --port 80 --replicas 2
-kubectl expose deployment game2048 --port 80 --target-port 80 --protocol TCP
-kubectl get ingressClass --all-namespaces
+# - kubectl create deployment game2048 --image=woodlee/docker-2048 --port 80 --replicas 2
+# - kubectl expose deployment game2048 --port 80 --target-port 80 --protocol TCP
+# kubectl get ingressClass --all-namespaces
 # kubectl create ingress game2048 --class=alb --annotation alb.ingress.kubernetes.io/scheme=internet-facing --annotation alb.ingress.kubernetes.io/load-balancer-name=eks-stage-stage  --annotation alb.ingress.kubernetes.io/target-type=ip --rule="/*=game2048:80"
-kubectl create ingress game2048 --class=nginx --rule="/*=game2048:80"
-kubectl get ing                          
-    NAME       CLASS   HOSTS   ADDRESS                                                                      PORTS   AGE
-    game2048   nginx   *       acc492abbfb96427795320aa80bc85bd-1976608275.eu-central-1.elb.amazonaws.com   80      20m
+# kubectl create ingress game2048 --class=nginx --rule="/*=game2048:80"
+# kubectl get ing                          
+#     NAME       CLASS   HOSTS   ADDRESS                                                                      PORTS   AGE
+#     game2048   nginx   *       acc492abbfb96427795320aa80bc85bd-1976608275.eu-central-1.elb.amazonaws.com   80      20m
+
+# -->
+export KUBECONFIG=/tmp/myconf
+aws eks --region eu-central-1 update-kubeconfig --name eks-stage
+
+helm install nginx ingress-nginx/ingress-nginx -n nginx --create-namespace
+helm install nginx --set controller.service.annotations='elbv2.k8s.aws/cluster: eks-stage' ingress-nginx/ingress-nginx
+
+
+cat ingress-nginx.yaml | yq '.controller.service.annotations'
+elbv2.k8s.aws/cluster: "eks-stage"
+kubernetes.io/cluster/eks-stage: "owned"
+
+# Нужно всё-таки помечать подсети
+kubernetes.io/role/elb: 1
 
 helm upgrade --install \
   cert-manager jetstack/cert-manager \
@@ -114,6 +130,11 @@ helm upgrade --install \
 kubectl create secret generic cloudflare-apikey-secret --from-literal \
   key=
 
+> Before continue cname records should be created:
+> - `www.aaaj.site CNAME abe2473b2521e41b0b6ba019c34334b2-970991057.eu-central-1.elb.amazonaws.com`
+> - `w3.aaaj.site CNAME abe2473b2521e41b0b6ba019c34334b2-970991057.eu-central-1.elb.amazonaws.com`
+
+# Create cluster-issuer (for staging reason)
 cat <<EOF | k apply -f-
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -132,6 +153,7 @@ spec:
             ingressClassName: nginx
 EOF
 
+# Create cluster-issuer (for prod reason)
 cat <<EOF | k apply -f-
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -150,14 +172,15 @@ spec:
             ingressClassName: nginx
 EOF
 
-helm install nginx ingress-nginx/ingress-nginx -n nginx --create-namespace
+kubectl create deployment game2048 --image=woodlee/docker-2048 --port 80 --replicas 2
+kubectl expose deployment game2048 --port 80 --target-port 80 --protocol TCP
 
-# For letsencrypt-staging
+# Try to get certificate with letsencrypt-staging
 cat <<EOF | k apply -f-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: game2048
+  name: game2048-staging
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-staging
 spec:
@@ -165,7 +188,7 @@ spec:
   tls:
     - hosts:
       - www.aaaj.site
-      secretName: myingress-cert
+      secretName: www.aaaj.site-staging
   rules:
     - host: www.aaaj.site
       http:
@@ -179,12 +202,19 @@ spec:
           pathType: Prefix
 EOF
 
-# For letsencrypt-prod
+# Check that everything is ok:
+kubectl get secrets www.aaaj.site-staging -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text | grep Issuer: -A3
+#       Issuer: C=US, O=(STAGING) Let's Encrypt, CN=(STAGING) Counterfeit Cashew R10
+#       Validity
+#           Not Before: Nov 16 12:51:06 2024 GMT
+#           Not After : Feb 14 12:51:05 2025 GMT
+
+# Delete previous Ingress and create ingress based on letsencrypt-prod ClusterIssuer
 cat <<EOF | k apply -f-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: game2048
+  name: game2048-prod
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
@@ -192,7 +222,7 @@ spec:
   tls:
     - hosts:
       - w3.aaaj.site
-      secretName: w3.aaaj.site-cert
+      secretName: w3.aaaj.site-prod
   rules:
     - host: w3.aaaj.site
       http:
@@ -206,8 +236,19 @@ spec:
           pathType: Prefix
 EOF
 ```
---> https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
 
+Check:
+```bash
+kubectl get secrets w3.aaaj.site-prod -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text | grep Issuer: -A3
+#       Issuer: C=US, O=Let's Encrypt, CN=R10
+#       Validity
+#           Not Before: Nov 16 13:07:30 2024 GMT
+#           Not After : Feb 14 13:07:29 2025 GMT
+openssl s_client -connect w3.aaaj.site:443 -showcerts
+curl -D - -s "https://w3.aaaj.site" -o /dev/null
+```
+--> https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
+-!-> https://medium.com/@artem.hatchenko/eks-alb-controller-how-to-use-existing-nlb-4b71b91af939
 
 
 
@@ -233,3 +274,11 @@ kubernetes.io/role/elb: 1
 https://www.youtube.com/watch?v=P4ymKRUYoB8
 Service Mesh
 https://www.youtube.com/live/m9DaD6FdY_4?si=hbKaPeuBqwLR5K0T&t=3499
+
+Полезные ссылки по ingres:
+- https://medium.com/@jainishshah17/use-pre-created-existing-loadbalancer-to-expose-your-kubernetes-service-407fb65cb416
+- https://rafaelmedeiros94.medium.com/aws-configuring-a-private-nlb-with-nginx-ingress-on-kubernetes-using-ip-target-type-ffa2681ef4ad
+- https://medium.com/@yakuphanbilgic3/how-to-set-up-ssl-tls-certificates-from-lets-encrypt-with-nginx-ingress-controller-and-9593b0eb8f23
+- https://medium.com/@aedemirsen/kubernetes-loadbalancer-and-ingress-controller-7b448f6314f6
+- https://medium.com/@mudasirhaji/how-to-configure-nginx-as-a-reverse-proxy-on-aws-ec2-instance-270736ca2a50
+- https://gurselgazii.medium.com/integrating-minio-with-spring-boot-a-guide-to-simplified-object-storage-525d5a7686cc
