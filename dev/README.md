@@ -1,3 +1,5 @@
+новая версия в директории new!
+
 How to start:
 
 Cloudflare
@@ -34,7 +36,7 @@ export TF_VAR_aws_secret_access_key=
 
 Terraform
 ```bash
-$ terraform --version
+terraform --version
 Terraform v1.9.7
 on linux_amd64
 
@@ -46,7 +48,7 @@ aws eks --region eu-central-1 update-kubeconfig --name eks-stage
 ```
 
 Infracost
-```
+```bash
 infracost auth login
 infracost breakdown --path . --format html --out-file infracost-infra.html --show-skipped
 ```
@@ -58,6 +60,7 @@ infracost breakdown --path . --format html --out-file infracost-infra.html --sho
 4 Установить алёрты на предполагаемые бюджеты
 5 В кластер добавить метрики, чтобы смотреть ресурсы
 6 Возможно переписать установку nginx и letsencrypt с используя провайдеры terraform, такие как kubectl и helm. Зависит от требований
+7 У всех переменных добавить description и default value
 
 export TF_LOG_CORE=warn
 terraform plan

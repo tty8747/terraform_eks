@@ -37,8 +37,9 @@ module "eks" {
   cluster_name      = "eks"
   environment       = var.environment
   cluster_version   = 1.31
-  subnet_ids        = module.vpc.priv_subnets[*].id
-  subnet_ids_pub    = module.vpc.pub_subnets[*].id
   cluster_log_types = ["api"]
   instance_types    = ["t2.micro"]
+  subnet_ids        = module.vpc.priv_subnets[*].id
+  subnet_ids_pub    = module.vpc.pub_subnets[*].id
+  vpc               = module.vpc
 }
