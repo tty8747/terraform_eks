@@ -35,3 +35,11 @@ variable "openid_list" {
   type    = list(string)
   default = ["sts.amazonaws.com"]
 }
+
+variable "vpc" {
+  type    = object(
+    {
+      id  = string
+    }
+  )
+}

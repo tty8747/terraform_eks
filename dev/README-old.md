@@ -1,3 +1,5 @@
+новая версия в директории new!
+
 How to start:
 
 Cloudflare
@@ -51,16 +53,7 @@ infracost auth login
 infracost breakdown --path . --format html --out-file infracost-infra.html --show-skipped
 ```
 
-## Задача:
-В пустом аккаунте любого cloud провайдера, предпочтительно aws:
-  - запустить k8s (managed/self-hosted - на ваш выбор);
-  - реализовать автоскейлинг нод;
-  - запустить nginx c автоспейлингом подов;
-  - сделать его публично доступным.
-
-> iaac можно использовать какую/какие угодно, на ваше усмотрение. Результат ожидаем увидеть в виде архива с iaac кодом.
-
-Вопрос: Что бы вы сделали, чтобы этот кластер стал production-ready? Ожидаем получить список пунктов
+<!--
 1 Хранить tfstate в s3 или dynamodb
 2 Возможно расширить лимиты, если есть понимание сколько нод может понадобиться при нагрузке
 3 порт 6443 управления кластером каким-то образом прикрыть или вывести в другую подсеть
@@ -68,77 +61,57 @@ infracost breakdown --path . --format html --out-file infracost-infra.html --sho
 5 В кластер добавить метрики, чтобы смотреть ресурсы
 6 Возможно переписать установку nginx и letsencrypt с используя провайдеры terraform, такие как kubectl и helm. Зависит от требований
 7 У всех переменных добавить description и default value
-8 попробовать переписать `AWS Load Balancer Controller TargetGroup Binding Only Policy` https://github.com/terraform-aws-modules/terraform-aws-iam/blob/master/modules/iam-role-for-service-accounts-eks/policies.tf
+
+export TF_LOG_CORE=warn
+terraform plan
+
+Задача: в пустом аккаунте любого cloud провайдера (предпочтительно aws) запустить k8s (managed/self-hosted - на ваш выбор); реализовать автоскейлинг нод; запустить nginx c автоспейлингом подов; сделать его публично доступным.
+
+Пометка: iaac можно использовать какую/какие угодно, на ваше усмотрение. Результат ожидаем увидеть в виде архива с iaac кодом.
+
+Вопрос: что бы вы сделали, чтобы этот кластер стал production-ready? Ожидаем получить список пунктов
 
 Идеального и вылизанного решения не требуем, важно чтобы работало. Вопросы/комментарии - возможны, но и задание и вопрос - крайне открытые, как именно вы будете делать - полностью ваш выбор)
 
-## Запуск приложения на развёрнутом кластере:
+how-to-create-aws-eks-cluster-step-by-step:
+https://medium.com/@sanoj.sudo/how-to-create-aws-eks-cluster-step-by-step-a97420ede922
+-->
+
+
 ```bash
+# export KUBECONFIG=/tmp/myconf
+# aws eks --region eu-central-1 update-kubeconfig --name eks-stage
+# helm repo add eks-charts https://aws.github.io/eks-charts
+# helm repo update
+# # helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller --set clusterName=eks-stage-stage --set region=eu-central-1 --set vpcId=vpc-0fefa9c664d9be1c0
+
+# kubectl --namespace kube-system create serviceaccount aws-load-balancer-controller
+# kubectl -n kube-system annotate serviceaccounts aws-load-balancer-controller "eks.amazonaws.com/role-arn=arn:aws:iam::619115920608:role/AmazonEKSLoadBalancerControllerRole"
+
+# helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller \
+#   -n kube-system \
+#   --set clusterName=eks-stage \
+#   --set serviceAccount.create=false \
+#   --set serviceAccount.name=aws-load-balancer-controller \
+#   --set region=eu-central-1 \
+#   --set vpcId=vpc-083b71b7e227218d4
+
+
+
+# Also: https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/examples/echo_server/#deploy-the-echoserver-resources
+# - kubectl create deployment game2048 --image=woodlee/docker-2048 --port 80 --replicas 2
+# - kubectl expose deployment game2048 --port 80 --target-port 80 --protocol TCP
+# kubectl get ingressClass --all-namespaces
+# kubectl create ingress game2048 --class=alb --annotation alb.ingress.kubernetes.io/scheme=internet-facing --annotation alb.ingress.kubernetes.io/load-balancer-name=eks-stage-stage  --annotation alb.ingress.kubernetes.io/target-type=ip --rule="/*=game2048:80"
+# kubectl create ingress game2048 --class=nginx --rule="/*=game2048:80"
+# kubectl get ing                          
+#     NAME       CLASS   HOSTS   ADDRESS                                                                      PORTS   AGE
+#     game2048   nginx   *       acc492abbfb96427795320aa80bc85bd-1976608275.eu-central-1.elb.amazonaws.com   80      20m
+
+# -->
 export KUBECONFIG=/tmp/myconf
 aws eks --region eu-central-1 update-kubeconfig --name eks-stage
 
-# kubectl create sa aws_load_balancer_controller
-cat <<EOF | kubectl apply -f-
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: aws-load-balancer-controller
-  namespace: kube-system
-  annotations:
-    # module.eks.iam_role_lb.arn
-    eks.amazonaws.com/role-arn: "arn:aws:iam::619115920608:role/eks-stage-AmazonEKSLoadBalancerControllerRole"
-    eks.amazonaws.com/sts-regional-endpoints: "true"
-  labels:
-    app.kubernetes.io/component: "controller"
-    app.kubernetes.io/name: "aws-load-balancer-controller"
-EOF
-
-helm repo add eks-charts https://aws.github.io/eks-charts
-helm repo update
-
-helm install aws-load-balancer-controller eks-charts/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=eks-stage \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller \
-# --set region=eu-central-1 \
-# --set vpcId=vpc-094afbeeab59d2929
-```
-Развернём приложение
-> Чтобы [использовать уже существующий loadbalancer](https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/guide/ingress/annotations/#resource-tags), необходимо выполнение 2х условий:
-> - у loadbalancer в aws ec2 должен быть создан тег: "ingress.k8s.aws/stack"    = "gocovid/ingress-gocovid"
-> - ingress для приложения в кластере должен располагаться в ns gocovid и иметь имя ingress-gocovid
-> Таким образом трафик будет loadbalancer будет перенаправлять трафик на ingress-gocovid в кластере k8s
-> Указание другого имени ingress или размещение в другом namespace приведёт к созданию нового ingress
-
-```bash
-k create ns gocovid
-kn gocovid
-kubectl -n gocovid create deployment game2048 --image=woodlee/docker-2048 --port 80 --replicas 2
-
-# Созадим service
-kubectl -n gocovid expose deployment game2048 --port 80 --target-port 80 --protocol TCP
-
-# Создадим ingress
-kubectl get ingressClass --all-namespaces
-kubectl -n gocovid create ingress ingress-gocovid1 --class=alb --annotation alb.ingress.kubernetes.io/scheme=internet-facing --annotation alb.ingress.kubernetes.io/target-type=ip --annotation kubernetes.io/ingress.class=alb --annotation alb.ingress.kubernetes.io/load-balancer-name=alb-eks-stage --rule="/*=game2048:80"
-
-# Проверим
-# Заметка: нужно чтобы ingress был с именем указанным в тегах aws lb и в неймспейсе указанном в тегах aws lb, так же должны быть все перечисленные аннотации
-# при удалении этого lb так же удаляется ресурс load balancer в aws ec2
-kubectl get ing
-NAME              CLASS   HOSTS   ADDRESS                                                   PORTS   AGE
-ingress-gocovid   alb     *       alb-eks-stage-1884910035.eu-central-1.elb.amazonaws.com   80      4m39s
-```
-
-Вот такая ошибка:
-{"level":"info","ts":"2025-01-12T16:26:24Z","msg":"version","GitVersion":"v2.11.0","GitCommit":"ba4152c1ba7c75be194d75cf343219d4aeaeb116","BuildDate":"2024-12-12T21:01:50+0000"}
-{"level":"error","ts":"2025-01-12T16:26:29Z","logger":"setup","msg":"unable to initialize AWS cloud","error":"failed to get VPC ID: failed to fetch VPC ID from instance metadata: error in fetching vpc id through ec2 metadata: get mac metadata: operation error ec2imds: GetMetadata, canceled, context deadline exceeded"}
-Связано с EC2 Instance Metadata Service, почитать про эту службу https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
-
-
-# --- Вот это всё для ClusterIssuer
-```bash
 helm install nginx ingress-nginx/ingress-nginx -n nginx --create-namespace
 helm install nginx --set controller.service.annotations='elbv2.k8s.aws/cluster: eks-stage' ingress-nginx/ingress-nginx
 
@@ -277,15 +250,33 @@ kubectl get secrets w3.aaaj.site-prod -o jsonpath='{.data.tls\.crt}' | base64 -d
 openssl s_client -connect w3.aaaj.site:443 -showcerts
 curl -D - -s "https://w3.aaaj.site" -o /dev/null
 ```
+--> https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
+-!-> https://medium.com/@artem.hatchenko/eks-alb-controller-how-to-use-existing-nlb-4b71b91af939
+
+
+
+In the subnets sections → Tags → manage tags → key section — kubernetes.io/cluster/<cluster-name> → value —shared
+https://engineering.chingari.io/configure-an-eks-cluster-using-terraform-and-an-aws-load-balancer-controller-5c6aa91bfdf6
+
+aws eks describe-cluster --name <my-cluster> --query "cluster.identity.oidc.issuer" --output text
+https://oidc.eks.eu-central-1.amazonaws.com/id/7ABFD5AA0D82CB7F69A12C4998C0369C
+
+"Federated": "arn:aws:iam::619115920608:oidc-provider/oidc.eks.eu-central-1.amazonaws.com/id/7ABFD5AA0D82CB7F69A12C4998C0369C"
+
+"oidc.eks.eu-central-1.amazonaws.com/id/7ABFD5AA0D82CB7F69A12C4998C0369C:sub": "system:serviceaccount:kube-system:aws-load-balancer-controller",
+"oidc.eks.eu-central-1.amazonaws.com/id/7ABFD5AA0D82CB7F69A12C4998C0369C:aud": "sts.amazonaws.com"
+
+internal subnets:
+kubernetes.io/role/internal-elb: 1
+
+public subnets:
+kubernetes.io/role/elb: 1
+
 
 Артур
 https://www.youtube.com/watch?v=P4ymKRUYoB8
 Service Mesh
 https://www.youtube.com/live/m9DaD6FdY_4?si=hbKaPeuBqwLR5K0T&t=3499
-
-EKS по шагам:
-- https://medium.com/@sanoj.sudo/how-to-create-aws-eks-cluster-step-by-step-a97420ede922
-- https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
 
 Полезные ссылки по ingres:
 - https://medium.com/@jainishshah17/use-pre-created-existing-loadbalancer-to-expose-your-kubernetes-service-407fb65cb416
@@ -294,4 +285,3 @@ EKS по шагам:
 - https://medium.com/@aedemirsen/kubernetes-loadbalancer-and-ingress-controller-7b448f6314f6
 - https://medium.com/@mudasirhaji/how-to-configure-nginx-as-a-reverse-proxy-on-aws-ec2-instance-270736ca2a50
 - https://gurselgazii.medium.com/integrating-minio-with-spring-boot-a-guide-to-simplified-object-storage-525d5a7686cc
-- https://medium.com/@artem.hatchenko/eks-alb-controller-how-to-use-existing-nlb-4b71b91af939

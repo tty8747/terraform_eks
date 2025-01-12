@@ -174,7 +174,7 @@ resource "aws_iam_openid_connect_provider" "default" {
 resource "aws_security_group" "lb" {
   name        = "lb"
   description = "Allow inbound traffic and all outbound traffic"
-  vpc_id      = "vpc-0a79c5ada0eadaadc"
+  vpc_id      = var.vpc.id
 
   tags = {
     Name = "lb"
@@ -206,11 +206,10 @@ resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
 resource "aws_lb" "eks" {
   name               = "alb-${local.cluster_name}"
   internal           = false
-  load_balancer_type = "application"
+# load_balancer_type = "application"
+  load_balancer_type = "network"
   security_groups    = [aws_security_group.lb.id]
   subnets            = var.subnet_ids_pub
-
-  enable_cross_zone_load_balancing = true
 
   tags = {
     Name                       = "alb-${local.cluster_name}"
